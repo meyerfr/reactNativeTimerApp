@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { View, Button, FlatList, StyleSheet, SafeAreaView } from 'react-native';
 import Timer from '../components/Timer';
+import getInitialTime from "../util/initialTimes"
 
 const HomeScreen = () => {
 	const [timers, setTimers] = useState([]);
-	const [, setTick] = useState(0); // Dummy state to force re-renders
+	const [tick, setTick] = useState(0); // Dummy state to force re-renders
 
 	// Function to add a new timer
 	const addTimer = (type) => {
 		const newTimer = {
 			id: Date.now().toString(),
 			type,
-			initialTime: ['pomodoro', 'standard'].includes(type) ? 1500 : 0, // Set the initial time for Pomodoro or Stopwatch
+			initialTime: getInitialTime(type),
 			isRunning: false, // Initialize the running state
 			startTime: null,  // Start time will be recorded when the timer starts
 			elapsedTime: 0, // Elapsed time when paused
@@ -76,6 +77,7 @@ const HomeScreen = () => {
 						toggleRunning={toggleRunning}
 						onDelete={deleteTimer}
 						resetTime={item.initialTime}
+						tick={tick}
 					/>
 				)}
 			/>

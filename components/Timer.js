@@ -1,8 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Svg, { Circle } from "react-native-svg"
 
-const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggleRunning, onDelete, resetTime }) => {
+import getColorByType from "../util/timerColors"
+import {formatStopwatchTime, formatTime} from "../util/timeFormat"
+
+const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggleRunning, onDelete, resetTime, tick }) => {
 	const scaleAnim = useRef(new Animated.Value(isRunning ? 100 : 0)).current; // Animation for background expansion
+	const circleRef = useRef(null); // Reference for the circular progress bar
+	const radius = 50;
+	const circumference = 2 * Math.PI * radius;
 
 	// Calculate the time dynamically based on whether the timer is running
 	const calculateTime = () => {
@@ -24,35 +31,6 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 		return elapsedTime; // Use elapsedTime when paused
 	};
 
-	// Format time to MM:SS for non-stopwatch timers
-	const formatTime = (timeInSeconds) => {
-		const minutes = Math.floor(timeInSeconds / 60);
-		const seconds = timeInSeconds % 60;
-		return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-	};
-
-	// Format time to SS.SSS for stopwatch
-	const formatStopwatchTime = (timeInMilliseconds) => {
-		const seconds = Math.floor(timeInMilliseconds / 1000);
-		const milliseconds = timeInMilliseconds % 1000;
-		return `${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
-	};
-
-	// Set color based on timer type
-	const getColorByType = () => {
-		switch (type) {
-			case 'pomodoro':
-				return '#FF6347'; // Tomato red
-			case 'stopwatch':
-				return '#4682B4'; // Steel blue
-			case 'interval':
-				return '#32CD32'; // Lime green
-			case 'standard':
-			default:
-				return '#FFD700'; // Gold
-		}
-	};
-
 	// Animate background expansion when timer starts
 	const handleStartAnimation = () => {
 		Animated.timing(scaleAnim, {
@@ -70,6 +48,15 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 			useNativeDriver: false,
 		}).start();
 	};
+
+	// Update the progress of the circular progress bar based on the remaining time
+	useEffect(() => {
+		if (circleRef.current && type !== 'stopwatch') {
+			const timeLeft = calculateTime();
+			const progress = ((resetTime - timeLeft) / resetTime) * circumference; // Reverse calculation for shrinking effect
+			circleRef.current.setNativeProps({ strokeDashoffset: progress });
+		}
+	}, [isRunning, elapsedTime, startTime, resetTime, tick]);
 
 	useEffect(() => {
 		if (isRunning) {
@@ -111,8 +98,8 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 		Alert.alert('Timer Options', 'Select an action', options);
 	};
 
-	const timerColor = getColorByType();
-	const brighterColor = `${timerColor}AA`; // Lighter version of the color for background
+	const timerColor = getColorByType(type);
+	const brighterColor = `${timerColor}1A`; // Lighter version of the color for background
 
 	return (
 		<TouchableOpacity
@@ -133,20 +120,32 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 				]}
 			/>
 
+			{/* Circular Progress Bar (hidden for stopwatch) */}
+			{type !== 'stopwatch' && (
+				<Svg height='100' width='100' viewBox="0 0 104 104" style={styles.svgContainer}>
+					<Circle
+						ref={circleRef}
+						cx="52"
+						cy="52"
+						r={radius}
+						stroke={timerColor}
+						strokeWidth="4"
+						strokeDasharray={circumference}
+						strokeDashoffset={circumference}
+						fill="none"
+					/>
+				</Svg>
+			)}
+
 			{/* Static content with border */}
-			<View style={[styles.timerCircle, { borderColor: timerColor }]}>
+			<View style={[styles.timerCircle, { borderColor: `${timerColor}26` }]}>
 				<Text style={styles.timerText}>
 					{type === 'stopwatch' ? formatStopwatchTime(currentTime) : formatTime(currentTime)}
 				</Text>
-				<View>
-					{
-						// Show the timer type if it's not running
-						!isRunning && (
-							<Text style={styles.timerLabel}>
-								{type.charAt(0).toUpperCase() + type.slice(1)}
-							</Text>
-						)
-					}
+				<View style={styles.timerLabelContainer}>
+					<Text style={styles.timerLabel}>
+						{type.charAt(0).toUpperCase() + type.slice(1)}
+					</Text>
 					{
 						!isRunning && initialTime !== currentTime && (
 							<Text style={styles.timerLabel}>Paused</Text>
@@ -169,6 +168,10 @@ const styles = StyleSheet.create({
 		position: 'absolute',
 		borderRadius: 50,
 	},
+	svgContainer: {
+		position: 'absolute',
+		transform: [{ rotate: '-90deg' }], // Rotate to start the circle from the top
+	},
 	timerCircle: {
 		width: 100,
 		height: 100,
@@ -182,6 +185,9 @@ const styles = StyleSheet.create({
 		fontSize: 18,
 		fontWeight: 'bold',
 		color: '#000',
+	},
+	timerLabelContainer: {
+		alignItems: 'center',
 	},
 	timerLabel: {
 		fontSize: 14,
