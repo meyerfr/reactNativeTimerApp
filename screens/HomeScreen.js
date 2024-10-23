@@ -20,21 +20,45 @@ const HomeScreen = () => {
 	};
 
 	// Toggle running state for a specific timer
-	const toggleRunning = (timerId) => {
-		setTimers(timers.map(timer => {
-			if (timer.id === timerId) {
-				// If the timer is currently running, pause it and save the elapsed time
-				if (timer.isRunning) {
-					const now = new Date().getTime();
-					const newElapsedTime = timer.elapsedTime + (now - timer.startTime); // Update elapsed time
-					return { ...timer, isRunning: false, elapsedTime: newElapsedTime, startTime: null };
-				} else {
-					// If the timer is not running, start it from where it left off
-					return { ...timer, isRunning: true, startTime: new Date().getTime() };
+	const toggleRunning = (timerId, reset = false, resetTime = null, circleRef=null) => {
+		setTimers((prevTimers) =>
+			prevTimers.map((timer) => {
+				if (timer.id === timerId) {
+					if (reset) {
+						// Reset the progress indicator
+						if (circleRef && circleRef.current) {
+							circleRef.current.setNativeProps({ strokeDashoffset: 2 * Math.PI * 50 }); // Reset the progress circle
+						}
+
+						// Reset the timer's elapsed time and set it to not running
+						return {
+							...timer,
+							isRunning: false,
+							startTime: null,
+							elapsedTime: 0,
+						};
+					} else if (timer.isRunning) {
+						// Pause the timer and save elapsed time
+						const now = new Date().getTime();
+						const elapsed = now - timer.startTime;
+						return {
+							...timer,
+							isRunning: false,
+							elapsedTime: timer.elapsedTime + elapsed,
+							startTime: null,
+						};
+					} else {
+						// Start or resume the timer
+						return {
+							...timer,
+							isRunning: true,
+							startTime: new Date().getTime(),
+						};
+					}
 				}
-			}
-			return timer;
-		}));
+				return timer;
+			})
+		);
 	};
 
 	// Delete a timer

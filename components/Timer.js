@@ -1,16 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle } from "react-native-svg";
+
+import TimerOptionsModal from "./TimerOptionsModal"
 
 import getColorByType from "../util/timerColors";
 import { formatStopwatchTime, formatTime } from "../util/timeFormat";
 
+const screenWidth = Dimensions.get('window').width;
+const screenHeight = Dimensions.get('window').height;
+
 const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggleRunning, onDelete, resetTime }) => {
-	const scaleAnim = useRef(new Animated.Value(isRunning ? 100 : 0)).current; // Animation for background expansion
+	const timerBgAnim = useRef(new Animated.Value(isRunning ? 100 : 0)).current; // Animation for background expansion
 	const circleRef = useRef(null); // Reference for the circular progress bar
 	const radius = 50;
 	const circumference = 2 * Math.PI * radius;
 	const [localTime, setLocalTime] = useState(elapsedTime); // Local state for managing timer updates
+	// Modal specific variables
+	const timerRef = useRef(null);
+	const [timerPosition, setTimerPosition] = useState({ top: 0, left: 0 });
+	const [modalVisible, setModalVisible] = useState(false);
 
 	const animationFrameRef = useRef(null); // Reference to the animation frame
 
@@ -80,7 +89,7 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 
 	// Animate background expansion when timer starts
 	const handleStartAnimation = () => {
-		Animated.timing(scaleAnim, {
+		Animated.timing(timerBgAnim, {
 			toValue: 100, // Expand the background circle to 100% of its size
 			duration: 500,
 			useNativeDriver: false,
@@ -89,7 +98,7 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 
 	// Animate background shrinking when timer pauses or stops
 	const handleStopAnimation = () => {
-		Animated.timing(scaleAnim, {
+		Animated.timing(timerBgAnim, {
 			toValue: 0, // Shrink background to 0
 			duration: 500,
 			useNativeDriver: false,
@@ -112,91 +121,117 @@ const Timer = ({ id, type, initialTime, isRunning, startTime, elapsedTime, toggl
 		return () => stopAnimation(); // Cleanup the animation on unmount
 	}, [isRunning]);
 
-	// Handle long press actions (Start, Reset, Delete)
+	// Show modal when the user long-presses the timer
 	const handleLongPress = () => {
-		const options = [
-			{
-				text: isRunning ? 'Pause' : 'Start',
-				onPress: () => toggleRunning(id),
-			},
-		];
+		timerRef.current.measure((fx, fy, width, height, px, py) => {
+			// Calculate modal position to center it over the timer
+			const modalWidth = 250; // Assume modal has a fixed width
+			const modalHeight = 200; // Assume modal has a fixed height
 
-		if (initialTime !== resetTime) {
-			options.push({
-				text: 'Reset',
-				onPress: () => toggleRunning(id, true, resetTime),
-			});
-		}
+			let top = py + (height / 2) - (modalHeight / 2); // Place modal above the timer
+			let left = px + (width / 2) - (modalWidth / 2); // Center the modal horizontally
 
-		options.push({
-			text: 'Delete',
-			onPress: () => onDelete(id),
+			// Ensure the modal stays within the SafeAreaView
+			if (top < 0) top = 10; // Ensure it doesn't go off the top of the screen
+			if (top + modalHeight > screenHeight) top = screenHeight - modalHeight - 10
+			if (left < 0) left = 10; // Ensure it doesn't go off the left side
+			if (left + modalWidth > screenWidth) left = screenWidth - modalWidth - 10; // Ensure it doesn't go off the right side
+
+			setTimerPosition({ top, left, width, height });
+			setModalVisible(true);
 		});
-
-		options.push({
-			text: 'Cancel',
-			style: 'cancel',
-		});
-
-		Alert.alert('Timer Options', 'Select an action', options);
 	};
+
+	const modalHandlers = {
+		onStartPause: () => {
+			toggleRunning(id);
+			setModalVisible(false);
+		},
+		onReset: () => {
+			toggleRunning(id, true, resetTime, circleRef);
+			setModalVisible(false);
+		},
+		onDelete: () => {
+			onDelete(id);
+			setModalVisible(false);
+		},
+		onEdit: () => {
+			// You can implement your edit logic here
+			setModalVisible(false);
+		},
+	}
 
 	const timerColor = getColorByType(type);
 	const brighterColor = `${timerColor}1A`; // Lighter version of the color for background
 
+	// Determine if reset should be visible (if timer has started)
+	const hasStarted = elapsedTime > 0 || isRunning;
+
 	return (
-		<TouchableOpacity
-			onPress={() => toggleRunning(id)} // Toggle running state on simple click
-			onLongPress={handleLongPress} // Show options on long press
-			activeOpacity={0.7}
-			style={styles.timerContainer}
-		>
-			{/* Animated background */}
-			<Animated.View
-				style={[
-					styles.backgroundCircle,
-					{
-						backgroundColor: brighterColor,
-						width: scaleAnim,
-						height: scaleAnim,
-					},
-				]}
-			/>
+		<View>
+			<TouchableOpacity
+				onPress={() => toggleRunning(id)} // Toggle running state on simple click
+				onLongPress={handleLongPress} // Show options on long press
+				activeOpacity={0.7}
+				style={styles.timerContainer}
+				ref={timerRef}
+			>
+				{/* Animated background */}
+				<Animated.View
+					style={[
+						styles.backgroundCircle,
+						{
+							backgroundColor: brighterColor,
+							width: timerBgAnim,
+							height: timerBgAnim,
+						},
+					]}
+				/>
 
-			{/* Circular Progress Bar (hidden for stopwatch) */}
-			{type !== 'stopwatch' && (
-				<Svg height='100' width='100' viewBox="0 0 104 104" style={styles.svgContainer}>
-					<Circle
-						ref={circleRef}
-						cx="52"
-						cy="52"
-						r={radius}
-						stroke={timerColor}
-						strokeWidth="4"
-						strokeDasharray={circumference}
-						strokeDashoffset={circumference}
-						fill="none"
-					/>
-				</Svg>
-			)}
+				{/* Circular Progress Bar (hidden for stopwatch) */}
+				{type !== 'stopwatch' && (
+					<Svg height='100' width='100' viewBox="0 0 104 104" style={styles.svgContainer}>
+						<Circle
+							ref={circleRef}
+							cx="52"
+							cy="52"
+							r={radius}
+							stroke={timerColor}
+							strokeWidth="4"
+							strokeDasharray={circumference}
+							strokeDashoffset={circumference}
+							fill="none"
+						/>
+					</Svg>
+				)}
 
-			{/* Static content with border */}
-			<View style={[styles.timerCircle, { borderColor: `${timerColor}26` }]}>
-				<Text style={styles.timerText}>
-					{type === 'stopwatch' ? formatStopwatchTime(localTime) : formatTime(currentTime)}
-				</Text>
-				<View style={styles.timerLabelContainer}>
-					<Text style={styles.timerLabel}>
-						{type.charAt(0).toUpperCase() + type.slice(1)}
+				{/* Static content with border */}
+				<View style={[styles.timerCircle, { borderColor: `${timerColor}26` }]}>
+					<Text style={styles.timerText}>
+						{type === 'stopwatch' ? formatStopwatchTime(localTime) : formatTime(currentTime)}
 					</Text>
-					{
-						!isRunning && initialTime !== currentTime && (
-							<Text style={styles.timerLabel}>Paused</Text>
-						)
-					}
+					<View style={styles.timerLabelContainer}>
+						<Text style={styles.timerLabel}>
+							{type.charAt(0).toUpperCase() + type.slice(1)}
+						</Text>
+						{
+							!isRunning && initialTime !== currentTime && (
+								<Text style={styles.timerLabel}>Paused</Text>
+							)
+						}
+					</View>
 				</View>
-			</View>
-		</TouchableOpacity>
+			</TouchableOpacity>
+			{/* Custom Modal for Timer Options */}
+			<TimerOptionsModal
+				visible={modalVisible}
+				onClose={() => setModalVisible(false)}
+				modalHandlers={modalHandlers}
+				isRunning={isRunning}
+				hasStarted={hasStarted} // Pass the flag to show or hide reset
+				timerPosition={timerPosition}
+			/>
+		</View>
 	);
 };
 
