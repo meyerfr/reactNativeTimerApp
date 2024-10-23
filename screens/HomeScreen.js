@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Button, FlatList, StyleSheet, SafeAreaView } from 'react-native';
 import Timer from '../components/Timer';
-import getInitialTime from "../util/initialTimes"
+import getInitialTime from "../util/initialTimes";
 
 const HomeScreen = () => {
 	const [timers, setTimers] = useState([]);
-	const [tick, setTick] = useState(0); // Dummy state to force re-renders
 
 	// Function to add a new timer
 	const addTimer = (type) => {
@@ -43,15 +42,6 @@ const HomeScreen = () => {
 		setTimers(timers.filter((timer) => timer.id !== timerId));
 	};
 
-	// Interval to force re-render every 100ms for timers
-	useEffect(() => {
-		const interval = setInterval(() => {
-			setTick(tick => tick + 1); // Increment dummy state to force re-render
-		}, 100); // Update every 100ms (10 times per second)
-
-		return () => clearInterval(interval); // Cleanup interval on component unmount
-	}, []);
-
 	return (
 		<SafeAreaView style={styles.container}>
 			<View style={styles.buttonsContainer}>
@@ -77,7 +67,6 @@ const HomeScreen = () => {
 						toggleRunning={toggleRunning}
 						onDelete={deleteTimer}
 						resetTime={item.initialTime}
-						tick={tick}
 					/>
 				)}
 			/>
