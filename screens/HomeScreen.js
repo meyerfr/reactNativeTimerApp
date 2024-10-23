@@ -11,15 +11,41 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from '@react-navigation/native';
 import Timer from '../components/Timer';
-import getInitialTime from "../util/initialTimes";
 import getColorByType from "../util/timerColors"
+import TimerSettingsModal from "../components/TimerSettingsModal"
+
+const defaultTimers = [
+	{
+		id: '1',
+		type: 'Pomodoro',
+		label: 'Work',
+		initialTime: 1500,
+		color: '#FF6347', // Example color
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '2',
+		type: 'Standard',
+		label: 'Break',
+		initialTime: 600,
+		color: '#4682B4',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	}
+]
 
 const HomeScreen = () => {
-	const [timers, setTimers] = useState([]);
+	const [timers, setTimers] = useState(defaultTimers);
 
 	const [dropdownVisible, setDropdownVisible] = useState(false);
 	const dropdownRef = useRef(null);
 	const navigation = useNavigation()
+
+	const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+	const [currentTimer, setCurrentTimer] = useState(null);
 
 	// Set the header with the "plus" button
 	useLayoutEffect(() => {
@@ -36,7 +62,6 @@ const HomeScreen = () => {
 		});
 	}, [navigation, dropdownVisible]);
 
-
 	// Handle closing dropdown if clicked outside (if necessary)
 	const handleOutsideDropdownPress = () => {
 		setDropdownVisible(false);
@@ -44,16 +69,79 @@ const HomeScreen = () => {
 
 	// Function to add a new timer
 	const addTimer = (type) => {
+		// Define default values for each type of timer
+		let defaultLabel = 'New Timer';
+		let defaultTime = 0;
+		let defaultColor = '#000000'; // Default black color
+
+		// Define specific attributes based on the timer type
+		switch (type) {
+			case 'Pomodoro':
+				defaultLabel = 'Pomodoro';
+				defaultTime = 1500; // 25 minutes in seconds
+				defaultColor = '#FF6347'; // Tomato red
+				break;
+			case 'Standard':
+				defaultLabel = 'Standard';
+				defaultTime = 600; // 10 minutes in seconds
+				defaultColor = '#FFD700'; // Gold
+				break;
+			case 'Stopwatch':
+				defaultLabel = 'Stopwatch';
+				defaultTime = 0; // Stopwatch starts at 0
+				defaultColor = '#4682B4'; // Steel blue
+				break;
+			case 'Interval':
+				defaultLabel = 'Interval';
+				defaultTime = 300; // 5 minutes in seconds
+				defaultColor = '#32CD32'; // Lime green
+				break;
+			default:
+				defaultLabel = 'Custom';
+				defaultTime = 0;
+				defaultColor = '#000000'; // Default black color
+				break;
+		}
+
+		// Create a new timer object
 		const newTimer = {
-			id: Date.now().toString(),
-			type,
-			initialTime: getInitialTime(type),
-			isRunning: false, // Initialize the running state
-			startTime: null,  // Start time will be recorded when the timer starts
-			elapsedTime: 0, // Elapsed time when paused
+			id: Date.now().toString(), // Generate a unique ID based on timestamp
+			type: type,
+			label: defaultLabel,
+			initialTime: defaultTime,
+			color: defaultColor,
+			isRunning: false, // Initially, the timer is not running
+			startTime: null,
+			elapsedTime: 0, // No elapsed time initially
 		};
-		setTimers([...timers, newTimer]);
+
+		// Add the new timer to the existing list of timers
+		setTimers((prevTimers) => [...prevTimers, newTimer]);
+
 		setDropdownVisible(false)
+	};
+
+	const openSettings = (timer) => {
+		setCurrentTimer(timer);
+		setSettingsModalVisible(true);
+	};
+
+	// Handle saving timer changes
+	const handleSaveTimer = (updatedTimer) => {
+		const updatedTimers = timers.map((timer) => {
+			if (timer.id === updatedTimer.id) {
+				return {
+					...timer,
+					label: updatedTimer.label,
+					initialTime: updatedTimer.initialTime,
+					color: updatedTimer.color,
+				};
+			}
+			return timer;
+		});
+
+		setTimers(updatedTimers);
+		setSettingsModalVisible(false); // Close the settings modal after saving
 	};
 
 	// Toggle running state for a specific timer
@@ -98,9 +186,11 @@ const HomeScreen = () => {
 		);
 	};
 
-	// Delete a timer
-	const deleteTimer = (timerId) => {
-		setTimers(timers.filter((timer) => timer.id !== timerId));
+	// Handle deleting the timer
+	const handleDeleteTimer = (timerId) => {
+		const updatedTimers = timers.filter((timer) => timer.id !== timerId);
+		setTimers(updatedTimers);
+		setSettingsModalVisible(false);
 	};
 
 	return (
@@ -113,15 +203,12 @@ const HomeScreen = () => {
 					contentContainerStyle={styles.timersGrid}
 					renderItem={({ item }) => (
 						<Timer
-							id={item.id}
-							type={item.type}
-							initialTime={item.initialTime}
-							isRunning={item.isRunning}
-							startTime={item.startTime}
-							elapsedTime={item.elapsedTime}
+							key={item.id}
+							timer={item}
+							onEdit={() => openSettings(item)}
+							onDelete={() => handleDeleteTimer(item.id)}
+							onSave={handleSaveTimer}
 							toggleRunning={toggleRunning}
-							onDelete={deleteTimer}
-							resetTime={item.initialTime}
 						/>
 					)}
 				/>
@@ -134,13 +221,23 @@ const HomeScreen = () => {
 							keyExtractor={(item) => item}
 							numColumns={1}
 							renderItem={({ item }) => (
-								<TouchableOpacity style={[styles.customButton, {backgroundColor: `${getColorByType(item.toLowerCase())}1A`}]} onPress={() => addTimer(item.toLowerCase())}>
+								<TouchableOpacity style={[styles.customButton, {backgroundColor: `${getColorByType(item.toLowerCase())}1A`}]} onPress={() => addTimer(item)}>
 									<Text style={styles.buttonText}>Add {item} Timer</Text>
 								</TouchableOpacity>
 							)}
 						/>
 					</View>
 				</Pressable>
+			)}
+
+			{currentTimer && (
+				<TimerSettingsModal
+					visible={settingsModalVisible}
+					onClose={() => setSettingsModalVisible(false)}
+					onSave={handleSaveTimer}
+					timer={currentTimer}
+					onDelete={() => handleDeleteTimer(currentTimer.id)}
+				/>
 			)}
 		</View>
 	);
