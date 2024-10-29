@@ -19,18 +19,68 @@ const defaultTimers = [
 		id: '1',
 		type: 'Pomodoro',
 		label: 'Work',
-		initialTime: 1500,
-		color: '#FF6347', // Example color
+		initialTime: 1500*1000,
+		color: 'rgba(106, 52, 57, 0.5)', // Example color
 		isRunning: false,
 		startTime: null,
 		elapsedTime: 0,
 	},
 	{
 		id: '2',
-		type: 'Standard',
+		type: 'Stopwatch',
 		label: 'Break',
-		initialTime: 600,
-		color: '#4682B4',
+		initialTime: 0,
+		color: 'rgba(129, 208, 101, 1)',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '3',
+		type: 'Standard',
+		label: 'Sleep',
+		initialTime: 8*60*60*1000,
+		color: 'rgba(101,208,192,1)',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '4',
+		type: 'Standard',
+		label: 'Power Nap',
+		initialTime: 15*60*1000,
+		color: 'rgba(101,167,208,1)',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '5',
+		type: 'Standard',
+		label: 'Hours',
+		initialTime: 15*60*60*1000,
+		color: 'rgba(160,101,208,1)',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '6',
+		type: 'Standard',
+		label: 'Hours',
+		initialTime: (15*60*60*4)+(10*60)+45*1000,
+		color: 'rgba(205,152,71,1)',
+		isRunning: false,
+		startTime: null,
+		elapsedTime: 0,
+	},
+	{
+		id: '7',
+		type: 'Standard',
+		label: 'Min',
+		initialTime: 600000,
+		color: 'rgba(128,208,101,1)',
 		isRunning: false,
 		startTime: null,
 		elapsedTime: 0,
@@ -78,28 +128,28 @@ const HomeScreen = () => {
 		switch (type) {
 			case 'Pomodoro':
 				defaultLabel = 'Pomodoro';
-				defaultTime = 1500; // 25 minutes in seconds
-				defaultColor = '#FF6347'; // Tomato red
+				defaultTime = 1500*1000; // 25 minutes in seconds
+				defaultColor = 'rgba(255,99,71, 1)'; // Tomato red
 				break;
 			case 'Standard':
 				defaultLabel = 'Standard';
-				defaultTime = 600; // 10 minutes in seconds
-				defaultColor = '#FFD700'; // Gold
+				defaultTime = 600*1000; // 10 minutes in seconds
+				defaultColor = 'rgba(255,215,0,1)'; // Gold
 				break;
 			case 'Stopwatch':
 				defaultLabel = 'Stopwatch';
 				defaultTime = 0; // Stopwatch starts at 0
-				defaultColor = '#4682B4'; // Steel blue
+				defaultColor = 'rgba(70,130,180,1)'; // Steel blue
 				break;
 			case 'Interval':
 				defaultLabel = 'Interval';
-				defaultTime = 300; // 5 minutes in seconds
-				defaultColor = '#32CD32'; // Lime green
+				defaultTime = 300*1000; // 5 minutes in seconds
+				defaultColor = 'rgba(50,205,50,1)'; // Lime green
 				break;
 			default:
 				defaultLabel = 'Custom';
 				defaultTime = 0;
-				defaultColor = '#000000'; // Default black color
+				defaultColor = 'rgba(0,0,0,1)'; // Default black color
 				break;
 		}
 
@@ -121,7 +171,7 @@ const HomeScreen = () => {
 		setDropdownVisible(false)
 	};
 
-	const openSettings = (timer) => {
+	const openSettings = (timer, progressCircle) => {
 		setCurrentTimer(timer);
 		setSettingsModalVisible(true);
 	};
@@ -135,26 +185,24 @@ const HomeScreen = () => {
 					label: updatedTimer.label,
 					initialTime: updatedTimer.initialTime,
 					color: updatedTimer.color,
+					type: updatedTimer.type
 				};
 			}
 			return timer;
 		});
+
+
 
 		setTimers(updatedTimers);
 		setSettingsModalVisible(false); // Close the settings modal after saving
 	};
 
 	// Toggle running state for a specific timer
-	const toggleRunning = (timerId, reset = false, resetTime = null, circleRef=null) => {
+	const toggleRunning = (timerId, reset = false) => {
 		setTimers((prevTimers) =>
 			prevTimers.map((timer) => {
 				if (timer.id === timerId) {
 					if (reset) {
-						// Reset the progress indicator
-						if (circleRef && circleRef.current) {
-							circleRef.current.setNativeProps({ strokeDashoffset: 2 * Math.PI * 50 }); // Reset the progress circle
-						}
-
 						// Reset the timer's elapsed time and set it to not running
 						return {
 							...timer,

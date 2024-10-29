@@ -46,8 +46,6 @@ const TimerOptionsModal = ({ visible, onClose, modalHandlers: {onStartPause, onR
 const styles = StyleSheet.create({
 	modalOverlay: {
 		flex: 1,
-		// justifyContent: 'center',
-		// alignItems: 'center',
 		backgroundColor: 'rgba(0, 0, 0, 0.5)',
 	},
 	modalContainer: {

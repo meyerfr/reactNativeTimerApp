@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle } from "react-native-svg";
 
 import TimerOptionsModal from "./TimerOptionsModal"
-
-import getColorByType from "../util/timerColors";
-import { formatStopwatchTime, formatTime } from "../util/timeFormat";
+import TimerContent from "./TimerContent"
+import { rgbaOpacity } from "../util/rgbaOpacity"
 
 const screenWidth = Dimensions.get('window').width;
 const screenHeight = Dimensions.get('window').height;
@@ -22,7 +21,25 @@ const Timer = ({
 	const circleRef = useRef(null); // Reference for the circular progress bar
 	const radius = 50;
 	const circumference = 2 * Math.PI * radius;
-	const [localTime, setLocalTime] = useState(elapsedTime); // Local state for managing timer updates
+
+
+	const calculateTime = (inMilliseconds=true) => {
+		// For countdown timers (non-stopwatch)
+		if (!isRunning || !startTime) {
+			return Math.max((initialTime) - Math.floor(elapsedTime), 0);
+		}
+
+		const now = new Date().getTime();
+		let elapsed;
+		if (inMilliseconds) {
+			elapsed = Math.floor((now - startTime + elapsedTime)); // Elapsed time in seconds
+		} else{
+			elapsed = Math.floor((now - startTime + elapsedTime) / 1000); // Elapsed time in seconds
+		}
+		return Math.max(initialTime - elapsed, 0); // Ensure time doesn't go below 0 for countdown timers
+	};
+
+	const [localTime, setLocalTime] = useState(type === 'Stopwatch' ? elapsedTime : calculateTime()); // Local state for managing timer updates
 
 	// Modal specific variables
 	const timerContainerRef = useRef(null);
@@ -32,17 +49,6 @@ const Timer = ({
 	const animationFrameRef = useRef(null); // Reference to the animation frame
 
 	// Calculate the remaining time dynamically based on the timer's running state (for countdown timers)
-	const calculateTime = () => {
-		// For countdown timers (non-stopwatch)
-		if (!isRunning || !startTime) {
-			return Math.max(initialTime - Math.floor(elapsedTime / 1000), 0);
-		}
-
-		const now = new Date().getTime();
-		const elapsed = Math.floor((now - startTime + elapsedTime) / 1000); // Elapsed time in seconds
-		return Math.max(initialTime - elapsed, 0); // Ensure time doesn't go below 0 for countdown timers
-	};
-
 	// Calculate the stopwatch time dynamically (counts up)
 	const calculateStopwatchTime = () => {
 		// If the stopwatch is paused, return elapsedTime
@@ -56,20 +62,18 @@ const Timer = ({
 	};
 
 	// Determine the time to display
-	const currentTime = type === 'Stopwatch' ? calculateStopwatchTime() : calculateTime();
-
 	// Start the animation loop to update progress (for countdown timers)
 	const startTimerAnimation = () => {
 		const update = () => {
 			const timeLeft = calculateTime();
 			setLocalTime(timeLeft); // Update the local time state
-			if (circleRef.current && type !== 'Stopwatch') { // Skip progress update for stopwatch
-				const progress = ((initialTime - timeLeft) / initialTime) * circumference;
-				circleRef.current.setNativeProps({ strokeDashoffset: progress });
-			}
+			updateProgressCircle(timeLeft)
 			// Schedule the next animation frame
-			if (timeLeft > 0 && isRunning) {
-				animationFrameRef.current = requestAnimationFrame(update);
+			animationFrameRef.current = requestAnimationFrame(update);
+			// if (timeLeft > 0 && isRunning) {
+			if(timeLeft === 0 && isRunning) {
+				toggleRunning(id)
+				Alert.alert('Timer completed');
 			}
 		};
 		animationFrameRef.current = requestAnimationFrame(update);
@@ -90,13 +94,17 @@ const Timer = ({
 
 	// Stop the animation loop
 	const stopAnimation = () => {
+		if (type !== 'Stopwatch' && localTime === 0 && circleRef.current) {
+			circleRef.current.setNativeProps({ strokeDashoffset: 2 * Math.PI * radius });
+		}
+
 		if (animationFrameRef.current) {
 			cancelAnimationFrame(animationFrameRef.current);
 		}
 	};
 
 	// Animate background expansion when timer starts
-	const handleStartAnimation = () => {
+	const handleStartBgAnimation = () => {
 		Animated.timing(timerBgAnim, {
 			toValue: 100, // Expand the background circle to 100% of its size
 			duration: 500,
@@ -105,7 +113,7 @@ const Timer = ({
 	};
 
 	// Animate background shrinking when timer pauses or stops
-	const handleStopAnimation = () => {
+	const handleStopBgAnimation = () => {
 		Animated.timing(timerBgAnim, {
 			toValue: 0, // Shrink background to 0
 			duration: 500,
@@ -113,9 +121,16 @@ const Timer = ({
 		}).start();
 	};
 
+	const updateProgressCircle = (timeLeft) => {
+		if (circleRef.current && type !== 'Stopwatch') { // Skip progress update for stopwatch
+			const progress = ((initialTime - timeLeft) / initialTime) * circumference;
+			circleRef.current.setNativeProps({ strokeDashoffset: progress });
+		}
+	}
+
 	useEffect(() => {
 		if (isRunning) {
-			handleStartAnimation();
+			handleStartBgAnimation();
 			// Start animation based on timer type
 			if (type === 'Stopwatch') {
 				startStopwatchAnimation();
@@ -123,11 +138,29 @@ const Timer = ({
 				startTimerAnimation();
 			}
 		} else {
-			handleStopAnimation();
+			handleStopBgAnimation();
 			stopAnimation();
 		}
-		return () => stopAnimation(); // Cleanup the animation on unmount
+		return () => {
+			handleStopBgAnimation();
+			stopAnimation();
+		} // Cleanup the animation on unmount
 	}, [isRunning]);
+
+	// changes to timer itself
+	useEffect(() => {
+		cancelAnimationFrame(animationFrameRef.current);
+		const newTime = type === 'Stopwatch' ? elapsedTime : calculateTime(initialTime)
+		setLocalTime(newTime)
+		updateProgressCircle(newTime)
+		if (isRunning) {
+			if (type === 'Stopwatch') {
+				startStopwatchAnimation()
+			} else{
+				startTimerAnimation()
+			}
+		}
+	}, [startTime, initialTime, elapsedTime, type]);
 
 	// Show modal when the user long-presses the timer
 	const handleLongPress = () => {
@@ -152,7 +185,7 @@ const Timer = ({
 
 	const modalHandlers = {
 		onStartPause: () => {
-			toggleRunning(id);
+			handleToggleRunning(id)
 			setModalVisible(false);
 		},
 		onReset: () => {
@@ -164,10 +197,21 @@ const Timer = ({
 			setModalVisible(false);
 		},
 		onEdit: () => {
-			// You can implement your edit logic here
 			onEdit();
 			setModalVisible(false);
 		},
+	}
+
+	const handleToggleRunning = () => {
+		if (type === 'Stopwatch') {
+			return toggleRunning(id)
+		}
+		if (isRunning || localTime > 0) {
+			stopAnimation()
+			return toggleRunning(id);
+		} else{
+			return toggleRunning(id, true);
+		}
 	}
 
 	// Determine if reset should be visible (if timer has started)
@@ -176,7 +220,7 @@ const Timer = ({
 	return (
 		<View>
 			<TouchableOpacity
-				onPress={() => toggleRunning(id)} // Toggle running state on simple click
+				onPress={handleToggleRunning} // Toggle running state on simple click
 				onLongPress={handleLongPress} // Show options on long press
 				activeOpacity={0.7}
 				style={styles.timerContainer}
@@ -187,7 +231,7 @@ const Timer = ({
 					style={[
 						styles.backgroundCircle,
 						{
-							backgroundColor: `${color}1A`,
+							backgroundColor: `${rgbaOpacity(color, '0.25')}`,
 							width: timerBgAnim,
 							height: timerBgAnim,
 						},
@@ -202,7 +246,7 @@ const Timer = ({
 							cx="52"
 							cy="52"
 							r={radius}
-							stroke={color}
+							stroke={rgbaOpacity(color, '1')}
 							strokeWidth="4"
 							strokeDasharray={circumference}
 							strokeDashoffset={circumference}
@@ -212,19 +256,7 @@ const Timer = ({
 				)}
 
 				{/* Timer Label and Time */}
-				<View style={[styles.timerCircle, { borderColor: `${color}26` }]}>
-					<Text style={styles.timerText}>
-						{type === 'Stopwatch' ? formatStopwatchTime(localTime) : formatTime(currentTime)}
-					</Text>
-					<View style={styles.timerLabelContainer}>
-						<Text style={styles.timerLabel}>{label}</Text>
-						{
-							!isRunning && initialTime !== currentTime && (
-								<Text style={styles.timerLabel}>Paused</Text>
-							)
-						}
-					</View>
-				</View>
+				<TimerContent timeLeftInMilliseconds={localTime} elapsedTime={elapsedTime} type={type} color={color} label={label} isRunning={isRunning}/>
 			</TouchableOpacity>
 			{/* Custom Modal for Timer Options */}
 			<TimerOptionsModal
@@ -262,10 +294,34 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 		zIndex: 1, // Ensure the border and text appear above the background
 	},
-	timerText: {
-		fontSize: 18,
+	timeTextWrapper: {
+		flexDirection: 'row',
+		alignItems: 'flex-start',
+	},
+	timeTextSmall: {
+		fontSize: 8,
+		lineHeight: 8,
+		fontWeight: 400,
+		color: '#515151',
+		includeFontPadding: false
+	},
+	timeText: {
+		fontSize: 16,
+		textAlignVertical: 'top',
 		fontWeight: 'bold',
-		color: '#000',
+		includeFontPadding: false
+	},
+	timeTextMinWrapper: {
+		flexDirection: 'column'
+	},
+	superscript: {
+		fontSize: 8,
+		lineHeight: 10,
+		fontWeight: 400,
+		color: '#515151',
+		marginRight: 4,
+		includeFontPadding: false,
+		textAlignVertical: 'bottom'
 	},
 	timerLabelContainer: {
 		alignItems: 'center',
@@ -273,7 +329,10 @@ const styles = StyleSheet.create({
 	timerLabel: {
 		fontSize: 14,
 		textAlign: 'center',
-		color: '#555',
+		color: '#434343',
+	},
+	smallTimerLabel: {
+		fontSize: 12,
 	},
 });
 
