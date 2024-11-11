@@ -2,7 +2,7 @@ import React from "react"
 import { StyleSheet, Text, View } from "react-native"
 import { rgbaOpacity } from "../util/rgbaOpacity"
 
-const TimerContent = ({timeLeftInMilliseconds, type, isRunning, elapsedTime, color, label}) => {
+const TimerContent = ({timeLeftInMilliseconds, type, isRunning, elapsedTime, color, label, phase=null, intervalCount=0}) => {
 	const timeInSeconds = Math.floor(timeLeftInMilliseconds / 1000);
 	// Calculate days, hours, minutes, and seconds
 	const days = Math.floor(timeInSeconds / 86400);
@@ -12,7 +12,7 @@ const TimerContent = ({timeLeftInMilliseconds, type, isRunning, elapsedTime, col
 
 	const TimeDisplay = () => {
 		if (type === 'Stopwatch' || (days === 0 && hours === 0 && minutes === 0)) {
-			const milliseconds = timeLeftInMilliseconds % 1000;
+			const milliseconds = Math.floor(timeLeftInMilliseconds % 1000)
 			return (
 				<Text style={styles.timeText}>
 					{`${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`}
@@ -73,6 +73,12 @@ const TimerContent = ({timeLeftInMilliseconds, type, isRunning, elapsedTime, col
 			<View style={styles.timerLabelContainer}>
 				<Text style={styles.timerLabel}>{label}</Text>
 				<ExtraInfo/>
+				{
+					phase && <Text style={[styles.timerLabel, styles.smallTimerLabel, {color: '#52f6ae'}]}>{phase}</Text>
+				}
+				{
+					phase && <Text style={[styles.timerLabel, styles.smallTimerLabel, {color: '#52f6ae'}]}>{intervalCount + 1}</Text>
+				}
 			</View>
 		</View>
 	)

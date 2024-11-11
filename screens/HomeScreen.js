@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useRef } from 'react';
+import React, { useState, useLayoutEffect, useRef, useEffect } from 'react';
 import {
 	View,
 	Text,
@@ -7,12 +7,17 @@ import {
 	SafeAreaView,
 	Pressable,
 	TouchableOpacity,
+	AppState,
+	Platform
 } from 'react-native';
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from '@react-navigation/native';
 import Timer from '../components/Timer';
 import getColorByType from "../util/timerColors"
 import TimerSettingsModal from "../components/TimerSettingsModal"
+import IntervalTimer from "../components/IntervalTimer"
+import * as Notifications from "expo-notifications"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const defaultTimers = [
 	{
@@ -49,7 +54,7 @@ const defaultTimers = [
 		id: '4',
 		type: 'Standard',
 		label: 'Power Nap',
-		initialTime: 15*60*1000,
+		initialTime: 5*1000,
 		color: 'rgba(101,167,208,1)',
 		isRunning: false,
 		startTime: null,
@@ -87,7 +92,13 @@ const defaultTimers = [
 	}
 ]
 
+const handlePhaseCompletion = (phaseName) => {
+	sendNotification("Timer Ended", `${phaseName} phase completed!`);
+	handlePhaseTransition();
+};
+
 const HomeScreen = () => {
+	const [appState, setAppState] = useState(AppState.currentState);
 	const [timers, setTimers] = useState(defaultTimers);
 
 	const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -96,6 +107,78 @@ const HomeScreen = () => {
 
 	const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 	const [currentTimer, setCurrentTimer] = useState(null);
+
+	useEffect(() => {
+		const handleAppStateChange = (nextAppState) => {
+			if (appState.match(/inactive|background/) && nextAppState === "active") {
+				console.log("App has come to the foreground!");
+				cancelScheduledNotifications();
+				restoreTimers();
+			} else if (nextAppState.match(/inactive|background/)) {
+				console.log("App has gone to the background!");
+				saveTimerState(timers);
+				scheduleNotificationsForRunningTimers();
+			}
+			setAppState(nextAppState);
+		};
+
+		const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+		return () => {
+			subscription.remove();
+		};
+	}, [appState]);
+
+	const scheduleNotificationsForRunningTimers = () => {
+		timers.forEach((timer) => {
+			if (timer.isRunning) {
+				const timeLeft = calculateTimeLeft(timer);
+				console.log("Scheduling notifications for running timers", timer.id)
+				scheduleNotification(timer.id, timeLeft);
+			}
+		});
+	};
+
+	const calculateTimeLeft = (timer) => {
+		const now = new Date().getTime();
+		const elapsedTime = now - timer.startTime + timer.elapsedTime;
+		return Math.max(timer.initialTime - elapsedTime, 0); // Remaining time in ms
+	};
+
+	const scheduleNotification = async (timerId, timeLeft) => {
+		await Notifications.scheduleNotificationAsync({
+			content: {
+				title: "Timer Ended",
+				body: "Your timer has completed!",
+			},
+			trigger: { seconds: timeLeft / 1000 },
+		});
+	};
+
+	const cancelScheduledNotifications = () => {
+		Notifications.cancelAllScheduledNotificationsAsync();
+	};
+
+	const saveTimerState = async (timers) => {
+		try {
+			const timerData = JSON.stringify(timers);
+			await AsyncStorage.setItem("timers", timerData);
+			setTimers(timers.map(timer => ({...timer, isRunning: false}))); // Stop all timers
+		} catch (error) {
+			console.log("Error saving timer state:", error);
+		}
+	};
+
+	const restoreTimers = async () => {
+		try {
+			const timerData = await AsyncStorage.getItem("timers");
+			if (timerData) {
+				setTimers(JSON.parse(timerData));
+			}
+		} catch (error) {
+			console.log("Error loading timer state:", error);
+		}
+	};
 
 	// Set the header with the "plus" button
 	useLayoutEffect(() => {
@@ -171,7 +254,7 @@ const HomeScreen = () => {
 		setDropdownVisible(false)
 	};
 
-	const openSettings = (timer, progressCircle) => {
+	const openSettings = (timer) => {
 		setCurrentTimer(timer);
 		setSettingsModalVisible(true);
 	};
@@ -249,16 +332,33 @@ const HomeScreen = () => {
 					keyExtractor={(item) => item.id}
 					numColumns={3} // Display 3 timers per row
 					contentContainerStyle={styles.timersGrid}
-					renderItem={({ item }) => (
-						<Timer
-							key={item.id}
-							timer={item}
-							onEdit={() => openSettings(item)}
-							onDelete={() => handleDeleteTimer(item.id)}
-							onSave={handleSaveTimer}
-							toggleRunning={toggleRunning}
-						/>
-					)}
+					renderItem={({ item }) => {
+						switch (item.type) {
+							case 'Pomodoro':
+								return (
+									<IntervalTimer
+										key={item.id}
+										timer={item}
+										onEdit={() => openSettings(item)}
+										onDelete={() => handleDeleteTimer(item.id)}
+										onSave={handleSaveTimer}
+										toggleRunning={toggleRunning}
+									/>
+								)
+							default:
+								return (
+									<Timer
+										key={item.id}
+										timer={item}
+										onEdit={() => openSettings(item)}
+										onDelete={() => handleDeleteTimer(item.id)}
+										onSave={handleSaveTimer}
+										toggleRunning={toggleRunning}
+										appState={appState}
+									/>
+								)
+						}
+					}}
 				/>
 			</SafeAreaView>
 			{dropdownVisible && (

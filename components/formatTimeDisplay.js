@@ -16,9 +16,6 @@ export const formatTimeDisplay = (totalMilliseconds) => {
 	if (minutes > 0 || hours > 0 || days > 0) {
 		display += `${minutes}m `;
 	}
-	if (minutes > 0 || hours > 0 || days > 0) {
-		display += `${minutes}m `;
-	}
 	display += `${seconds}s`;
 
 	return display.trim();

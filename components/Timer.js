@@ -1,19 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle } from "react-native-svg";
 
 import TimerOptionsModal from "./TimerOptionsModal"
 import TimerContent from "./TimerContent"
 import { rgbaOpacity } from "../util/rgbaOpacity"
+import * as Notifications from "expo-notifications"
 
 const screenWidth = Dimensions.get('window').width;
 const screenHeight = Dimensions.get('window').height;
+
+const sendImmediateNotification = async (title, body) => {
+	await Notifications.scheduleNotificationAsync({
+		content: {
+			title: title,
+			body: body,
+		},
+		trigger: null, // Immediate notification
+	});
+};
 
 const Timer = ({
 	timer,
 	onEdit,
 	onDelete,
-	toggleRunning
+	toggleRunning,
+	appState
 }) => {
 	const { id, type, label, initialTime, color, isRunning, startTime, elapsedTime } = timer;
 
@@ -73,7 +85,7 @@ const Timer = ({
 			// if (timeLeft > 0 && isRunning) {
 			if(timeLeft === 0 && isRunning) {
 				toggleRunning(id)
-				Alert.alert('Timer completed');
+				// sendImmediateNotification("Timer Ended", `${label} timer ended.`);
 			}
 		};
 		animationFrameRef.current = requestAnimationFrame(update);
@@ -147,18 +159,35 @@ const Timer = ({
 		} // Cleanup the animation on unmount
 	}, [isRunning]);
 
+	// useEffect(() => {
+	// 	if (appState === 'background') {
+	// 		handleStopBgAnimation();
+	// 		stopAnimation()
+	// 	}
+	// 	if (appState === 'foreground') {
+	// 		handleStartBgAnimation();
+	// 		// Start animation based on timer type
+	// 		if (type === 'Stopwatch') {
+	// 			startStopwatchAnimation();
+	// 		} else {
+	// 			startTimerAnimation();
+	// 		}
+	// 	}
+	// }, [appState]);
+
 	// changes to timer itself
 	useEffect(() => {
 		cancelAnimationFrame(animationFrameRef.current);
 		const newTime = type === 'Stopwatch' ? elapsedTime : calculateTime(initialTime)
 		setLocalTime(newTime)
-		updateProgressCircle(newTime)
 		if (isRunning) {
 			if (type === 'Stopwatch') {
 				startStopwatchAnimation()
 			} else{
 				startTimerAnimation()
 			}
+		} else{
+			updateProgressCircle(newTime)
 		}
 	}, [startTime, initialTime, elapsedTime, type]);
 
