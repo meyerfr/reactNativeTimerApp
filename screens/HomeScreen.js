@@ -8,7 +8,7 @@ import {
 	Pressable,
 	TouchableOpacity,
 	AppState,
-	Platform
+	Alert, Modal, Button,
 } from 'react-native';
 import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from '@react-navigation/native';
@@ -18,6 +18,8 @@ import TimerSettingsModal from "../components/TimerSettingsModal"
 import IntervalTimer from "../components/IntervalTimer"
 import * as Notifications from "expo-notifications"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+
+import { Accelerometer } from "expo-sensors";
 
 const defaultTimers = [
 	{
@@ -92,11 +94,6 @@ const defaultTimers = [
 	}
 ]
 
-const handlePhaseCompletion = (phaseName) => {
-	sendNotification("Timer Ended", `${phaseName} phase completed!`);
-	handlePhaseTransition();
-};
-
 const HomeScreen = () => {
 	const [appState, setAppState] = useState(AppState.currentState);
 	const [timers, setTimers] = useState(defaultTimers);
@@ -107,6 +104,16 @@ const HomeScreen = () => {
 
 	const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 	const [currentTimer, setCurrentTimer] = useState(null);
+
+	const [shakeDetected, setShakeDetected] = useState(false);
+	const [stopTimersModalVisible, setStopTimersModalVisible] = useState(false);
+
+	const timersRef = useRef(timers);
+
+	useEffect(() => {
+		console.log('timers running', timers.filter(timer => timer.isRunning).length)
+		timersRef.current = timers;
+	}, [timers]);
 
 	useEffect(() => {
 		const handleAppStateChange = (nextAppState) => {
@@ -128,6 +135,45 @@ const HomeScreen = () => {
 			subscription.remove();
 		};
 	}, [appState]);
+
+
+	useEffect(() => {
+		Accelerometer.setUpdateInterval(200); // Adjust for more or less sensitivity
+
+		const subscription = Accelerometer.addListener((data) => {
+			const { x, y, z } = data;
+			const acceleration = Math.sqrt(x * x + y * y + z * z);
+
+			if (acceleration > 1.3) {
+				handleShake();
+			}
+		});
+
+		return () => subscription && subscription.remove();
+	}, []);
+
+	const handleShake = () => {
+		if (shakeDetected) return;
+
+		setShakeDetected(true);
+		setTimeout(() => setShakeDetected(false), 3000); // Reset shake detection after delay
+
+		const runningTimers = timersRef.current.filter((timer) => timer.isRunning);
+
+		if (runningTimers.length === 1) {
+			// Stop only if timer is running, no toggle
+			toggleRunning(runningTimers[0].id, false, true);
+			Alert.alert("Timer Stopped", `Stopped ${runningTimers[0].label}`);
+		} else if (runningTimers.length > 1) {
+			setStopTimersModalVisible(true);
+		}
+	};
+
+	const handleTimerSelect = (id) => {
+		toggleRunning(id);
+		setStopTimersModalVisible(false);
+		Alert.alert("Timer Stopped", `Stopped timer ${id}`);
+	};
 
 	const scheduleNotificationsForRunningTimers = () => {
 		timers.forEach((timer) => {
@@ -163,7 +209,9 @@ const HomeScreen = () => {
 		try {
 			const timerData = JSON.stringify(timers);
 			await AsyncStorage.setItem("timers", timerData);
-			setTimers(timers.map(timer => ({...timer, isRunning: false}))); // Stop all timers
+			const updatedTimers = timers.map(timer => ({...timer, isRunning: false}));
+			setTimers(updatedTimers); // Stop all timers
+			// timersRef.current = updatedTimers;
 		} catch (error) {
 			console.log("Error saving timer state:", error);
 		}
@@ -174,6 +222,7 @@ const HomeScreen = () => {
 			const timerData = await AsyncStorage.getItem("timers");
 			if (timerData) {
 				setTimers(JSON.parse(timerData));
+				// timersRef.current = JSON.parse(timerData);
 			}
 		} catch (error) {
 			console.log("Error loading timer state:", error);
@@ -248,8 +297,10 @@ const HomeScreen = () => {
 			elapsedTime: 0, // No elapsed time initially
 		};
 
+		const newTimers = [...timers, newTimer];
 		// Add the new timer to the existing list of timers
-		setTimers((prevTimers) => [...prevTimers, newTimer]);
+		setTimers(newTimers);
+		// timersRef.current = newTimers;
 
 		setDropdownVisible(false)
 	};
@@ -274,27 +325,38 @@ const HomeScreen = () => {
 			return timer;
 		});
 
-
-
 		setTimers(updatedTimers);
+		// timersRef.current = updatedTimers;
 		setSettingsModalVisible(false); // Close the settings modal after saving
 	};
 
-	// Toggle running state for a specific timer
-	const toggleRunning = (timerId, reset = false) => {
+	// Function to toggle timer state
+	const toggleRunning = (timerId, reset = false, stopOnly = false) => {
 		setTimers((prevTimers) =>
 			prevTimers.map((timer) => {
 				if (timer.id === timerId) {
+					// Stop timer if `stopOnly` is true and timer is running
+					if (stopOnly && timer.isRunning) {
+						const now = new Date().getTime();
+						const elapsed = now - timer.startTime;
+						return {
+							...timer,
+							isRunning: false,
+							elapsedTime: timer.elapsedTime + elapsed,
+							startTime: null,
+						};
+					}
+					// Reset logic
 					if (reset) {
-						// Reset the timer's elapsed time and set it to not running
 						return {
 							...timer,
 							isRunning: false,
 							startTime: null,
 							elapsedTime: 0,
 						};
-					} else if (timer.isRunning) {
-						// Pause the timer and save elapsed time
+					}
+					// Regular toggle
+					if (timer.isRunning) {
 						const now = new Date().getTime();
 						const elapsed = now - timer.startTime;
 						return {
@@ -304,7 +366,6 @@ const HomeScreen = () => {
 							startTime: null,
 						};
 					} else {
-						// Start or resume the timer
 						return {
 							...timer,
 							isRunning: true,
@@ -343,6 +404,7 @@ const HomeScreen = () => {
 										onDelete={() => handleDeleteTimer(item.id)}
 										onSave={handleSaveTimer}
 										toggleRunning={toggleRunning}
+										appState={appState}
 									/>
 								)
 							default:
@@ -354,6 +416,7 @@ const HomeScreen = () => {
 										onDelete={() => handleDeleteTimer(item.id)}
 										onSave={handleSaveTimer}
 										toggleRunning={toggleRunning}
+										isRunning={item.isRunning}
 										appState={appState}
 									/>
 								)
@@ -387,6 +450,33 @@ const HomeScreen = () => {
 					onDelete={() => handleDeleteTimer(currentTimer.id)}
 				/>
 			)}
+			<Button title="Test Shake" onPress={handleShake} />
+			<Modal
+				animationType="slide"
+				transparent={true}
+				visible={stopTimersModalVisible}
+				onRequestClose={() => setStopTimersModalVisible(false)}
+			>
+				<View style={styles.modalOverlay}>
+					<View style={styles.modalContent}>
+						<Text style={styles.modalTitle}>Select a Timer to Stop</Text>
+						{timers
+						.filter((timer) => timer.isRunning)
+						.map((timer) => (
+							<TouchableOpacity
+								key={timer.id}
+								onPress={() => handleTimerSelect(timer.id)}
+								style={styles.timerButton}
+							>
+								<Text style={styles.timerButtonText}>{timer.label}</Text>
+							</TouchableOpacity>
+						))}
+						<TouchableOpacity onPress={() => setStopTimersModalVisible(false)} style={styles.cancelButton}>
+							<Text style={styles.cancelButtonText}>Cancel</Text>
+						</TouchableOpacity>
+					</View>
+				</View>
+			</Modal>
 		</View>
 	);
 };
@@ -432,6 +522,45 @@ const styles = StyleSheet.create({
 	},
 	buttonText: {
 		fontSize: 14,
+	},
+	modalOverlay: {
+		flex: 1,
+		backgroundColor: "rgba(0, 0, 0, 0.5)",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	modalContent: {
+		width: "80%",
+		backgroundColor: "white",
+		padding: 20,
+		borderRadius: 10,
+		alignItems: "center",
+	},
+	modalTitle: {
+		fontSize: 18,
+		fontWeight: "bold",
+		marginBottom: 10,
+	},
+	timerButton: {
+		padding: 10,
+		marginVertical: 5,
+		backgroundColor: "#ddd",
+		width: "100%",
+		alignItems: "center",
+		borderRadius: 5,
+	},
+	timerButtonText: {
+		fontSize: 16,
+	},
+	cancelButton: {
+		marginTop: 15,
+		padding: 10,
+		backgroundColor: "#f00",
+		borderRadius: 5,
+	},
+	cancelButtonText: {
+		color: "#fff",
+		fontWeight: "bold",
 	},
 });
 

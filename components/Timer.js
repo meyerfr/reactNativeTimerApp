@@ -24,10 +24,11 @@ const Timer = ({
 	timer,
 	onEdit,
 	onDelete,
+	isRunning,
 	toggleRunning,
-	appState
 }) => {
-	const { id, type, label, initialTime, color, isRunning, startTime, elapsedTime } = timer;
+
+	const { id, type, label, initialTime, color, startTime, elapsedTime } = timer;
 
 	const timerBgAnim = useRef(new Animated.Value(isRunning ? 100 : 0)).current; // Animation for background expansion
 	const circleRef = useRef(null); // Reference for the circular progress bar
@@ -141,6 +142,7 @@ const Timer = ({
 	}
 
 	useEffect(() => {
+		console.log('isRunning changed', isRunning, label)
 		if (isRunning) {
 			handleStartBgAnimation();
 			// Start animation based on timer type
